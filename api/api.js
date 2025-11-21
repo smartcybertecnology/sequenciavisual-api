@@ -1,311 +1,304 @@
-// ======================================================================
-// Sequência Visual Mágica - API JS
-// Lógica do Jogo, Níveis e Feedback
-// ======================================================================
+// api/api.js - Código da Serverless Function no Vercel
 
-// Variáveis Globais de Jogo
-let nivelAtual = 1;
-let acertosNoNivel = 0;
-let totalSequenciasCorretas = 0;
-let tempoInicio;
-
-// Configuração do Nível (Emoji e Dificuldade)
-const configuracaoNiveis = [
-    { nivel: 1, emojies: ['🍎', '🍌', '🍇', '🍉'], comprimentoSequencia: 3, numOpcoes: 3, acertosNecessarios: 2 },
-    { nivel: 2, emojies: ['🍎', '🍌', '🍇', '🍉', '🍓'], comprimentoSequencia: 4, numOpcoes: 4, acertosNecessarios: 3 },
-    { nivel: 3, emojies: ['🍎', '🍌', '🍇', '🍉', '🍓', '🥝'], comprimentoSequencia: 5, numOpcoes: 5, acertosNecessarios: 4 },
-    { nivel: 4, emojies: ['🍎', '🍌', '🍇', '🍉', '🍓', '🥝', '🥭'], comprimentoSequencia: 6, numOpcoes: 6, acertosNecessarios: 5 },
-    { nivel: 5, emojies: ['🍎', '🍌', '🍇', '🍉', '🍓', '🥝', '🥭', '🍍'], comprimentoSequencia: 7, numOpcoes: 7, acertosNecessarios: 6 }
-];
-
-let sequenciaMestra = []; // Sequência correta a ser lembrada
-let sequenciaUsuario = []; // Sequência que o usuário clicou
-
-// Referências ao DOM
-const sequenciaVisualMostra = document.getElementById('sequenciaVisualMostra');
-const areaBotoesVisual = document.getElementById('areaBotoesVisual');
-const telaJogo = document.getElementById('telaJogo');
-
-// ======================================================================
-// FUNÇÕES DE LÓGICA DO JOGO (Expostas globalmente)
-// ======================================================================
+// Lista de Emojis que serão usados nas sequências.
+const EMOJIS_VISUAIS = ["😀", "😎", "🤩", "🚀", "🍕", "🐶", "🎈", "💖", "🤖", "👾", "👽", "🦄"];
+const DOMINIO_PERMITIDO = 'https://playjogosgratis.com'; // Domínio permitido
+const CACHE_HEADERS = {
+    // Configuração agressiva de cache para o JS injetável
+    'Cache-Control': 'public, max-age=0, s-maxage=3600, stale-while-revalidate=59',
+    'Content-Type': 'application/javascript; charset=utf-8'
+};
 
 /**
- * Inicia ou reinicia o ciclo de um nível (apresentação da sequência).
+ * Função de manipulação da requisição do Vercel.
+ * @param {import('http').IncomingMessage} req 
+ * @param {import('http').ServerResponse} res 
  */
-function iniciarSequenciaVisual() {
-    sequenciaUsuario = []; // Zera a sequência de cliques do usuário
-    sequenciaVisualMostra.innerHTML = ''; // Limpa a área de exibição
-    areaBotoesVisual.innerHTML = ''; // Limpa os botões de opção
+module.exports = async (req, res) => {
+    // 1. Lógica de Controle de CORS
+    const origin = req.headers.origin;
+    const isLocalhost = origin && (origin.includes('localhost') || origin.includes('127.0.0.1'));
     
-    // Inicia a contagem de tempo (se for a primeira vez no nível)
-    if (!tempoInicio) {
-        tempoInicio = Date.now();
-    }
-    
-    // Pega a configuração do nível atual (ou a última, se for nível muito alto)
-    const config = configuracaoNiveis[nivelAtual - 1] || configuracaoNiveis[configuracaoNiveis.length - 1];
-
-    // 1. Gera uma nova sequência mestra
-    sequenciaMestra = gerarSequenciaAleatoria(config.comprimentoSequencia, config.emojies);
-
-    // 2. Cria os elementos de emoji na tela (ainda invisíveis)
-    sequenciaMestra.forEach(emoji => {
-        const span = document.createElement('span');
-        span.className = 'emoji-sequencia';
-        span.innerText = emoji;
-        sequenciaVisualMostra.appendChild(span);
-    });
-
-    // 3. Inicia a apresentação visual
-    apresentarSequenciaVisual(0, config.nivel);
-}
-
-/**
- * Reseta todas as variáveis de jogo para começar do zero.
- */
-function resetarSequenciaVisual() {
-    nivelAtual = 1;
-    acertosNoNivel = 0;
-    totalSequenciasCorretas = 0;
-    tempoInicio = null;
-    sequenciaMestra = [];
-    sequenciaUsuario = [];
-}
-
-/**
- * Função de manipulação de eventos do clique do usuário.
- * @param {string} emojiClicado - O emoji selecionado pelo usuário.
- */
-function verificarCliqueUsuario(emojiClicado) {
-    if (telaJogo.classList.contains('bloqueado')) {
-        return; // Ignora cliques enquanto o jogo está bloqueado
-    }
-    
-    // Toca o som de clique (somClique é definido no index.html)
-    if (typeof somClique !== 'undefined' && somClique.paused) {
-        somClique.play().catch(e => console.log("Erro ao tocar som de clique:", e));
-    }
-
-    sequenciaUsuario.push(emojiClicado);
-
-    const indiceAtual = sequenciaUsuario.length - 1;
-
-    // Verifica se o clique está correto até o momento
-    if (sequenciaUsuario[indiceAtual] === sequenciaMestra[indiceAtual]) {
-        // Correto até agora
-        
-        // Se a sequência estiver completa e correta
-        if (sequenciaUsuario.length === sequenciaMestra.length) {
-            tratarAcertoCompleto();
-        }
-
+    // Define o cabeçalho CORS para o domínio permitido ou localhost
+    if (origin === DOMINIO_PERMITIDO || isLocalhost) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
     } else {
-        // Erro: sequência incorreta
-        tratarErroCompleto();
+        // Para qualquer outro domínio, nega o acesso
+        res.setHeader('Access-Control-Allow-Origin', 'null');
     }
-}
+    
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Max-Age', '86400'); // Cache de 24h para preflight
 
-// ======================================================================
-// FUNÇÕES DE APOIO E LÓGICA INTERNA
-// ======================================================================
-
-/**
- * Gera uma sequência aleatória de emojis.
- * @param {number} comprimento - O tamanho da sequência.
- * @param {string[]} emojiesDisponiveis - Lista de emojis para escolher.
- * @returns {string[]} A sequência de emojis gerada.
- */
-function gerarSequenciaAleatoria(comprimento, emojiesDisponiveis) {
-    const sequencia = [];
-    for (let i = 0; i < comprimento; i++) {
-        const randomIndex = Math.floor(Math.random() * emojiesDisponiveis.length);
-        sequencia.push(emojiesDisponiveis[randomIndex]);
+    // Trata a requisição OPTIONS (Preflight)
+    if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
     }
-    return sequencia;
-}
+    
+    // 2. Aplica os cabeçalhos de Cache
+    for (const [key, value] of Object.entries(CACHE_HEADERS)) {
+        res.setHeader(key, value);
+    }
+    
+    // 3. Lógica do Jogo Sequência Visual (Injectable JavaScript)
+    const gameLogicScript = `
+        // Variáveis de Estado do Jogo (Globais no contexto do index.html)
+        let sequenciaEmojis = [];
+        let sequenciaUsuarioEmojis = [];
+        let nivelVisual = 1;
+        let jogando = false;
+        let startTime = null; 
+        let totalTime = 0;
+        let totalAcertos = 0;
+        let totalErros = 0;
+        const emojisDisponiveis = ${JSON.stringify(EMOJIS_VISUAIS)};
 
-/**
- * Apresenta a sequência de emojis visualmente.
- * @param {number} index - O índice atual na sequência.
- * @param {number} nivel - O nível atual para ajustar a velocidade.
- */
-function apresentarSequenciaVisual(index, nivel) {
-    const elementosEmoji = document.querySelectorAll('#sequenciaVisualMostra .emoji-sequencia');
-    const delay = Math.max(800 - (nivel * 50), 300); // Velocidade aumenta com o nível
-
-    if (index < elementosEmoji.length) {
-        // Remove a classe 'ativo' do emoji anterior, se houver
-        if (index > 0) {
-            elementosEmoji[index - 1].classList.remove('ativo');
+        // Helper para reproduzir som de clique (usando a função global do index.html)
+        function playClick() {
+            if (typeof somClique !== 'undefined' && somClique.play) {
+                somClique.pause();
+                somClique.currentTime = 0;
+                somClique.play().catch(e => console.log("Erro ao tocar click:", e));
+            }
         }
         
-        // Adiciona a classe 'ativo' ao emoji atual
-        elementosEmoji[index].classList.add('ativo');
-
-        setTimeout(() => {
-            apresentarSequenciaVisual(index + 1, nivel);
-        }, delay);
-        
-    } else {
-        // Fim da apresentação
-        
-        // 1. Remove a classe 'ativo' do último emoji
-        if (elementosEmoji.length > 0) {
-            elementosEmoji[elementosEmoji.length - 1].classList.remove('ativo');
+        // ** NOVO: Função para inicializar/resetar todas as variáveis de estado **
+        function inicializarVariaveis() {
+            sequenciaEmojis = [];
+            sequenciaUsuarioEmojis = [];
+            nivelVisual = 1;
+            jogando = false;
+            startTime = Date.now(); 
+            totalTime = 0;
+            totalAcertos = 0;
+            totalErros = 0;
+            // Atualiza o visual para Nível 1 antes de começar a mostrar a sequência
+            if (typeof atualizarProgressoVisual === 'function') {
+                // Supondo 3 acertos para subir de nível
+                atualizarProgressoVisual(1, 0, 3);
+            }
+            document.getElementById('sequenciaVisualMostra').innerHTML = 'Preparando...';
+            document.getElementById('areaBotoesVisual').innerHTML = '';
         }
         
-        // 2. Limpa a área de exibição para a fase de resposta
-        sequenciaVisualMostra.innerHTML = '';
-        
-        // 3. 🚨 CORREÇÃO: SOMENTE AGORA CRIA OS BOTÕES DE RESPOSTA
-        criarBotoesOpcao(); 
-    }
-}
-
-/**
- * Cria os botões de opção (emojis) para o usuário clicar.
- */
-function criarBotoesOpcao() {
-    areaBotoesVisual.innerHTML = ''; // Limpa a área antes de criar
-    
-    const config = configuracaoNiveis[nivelAtual - 1] || configuracaoNiveis[configuracaoNiveis.length - 1];
-    
-    // Obtém o pool de emojis que devem aparecer nos botões:
-    // 1. Todos os emojis usados na sequência mestra (únicos).
-    let opcoes = [...new Set(sequenciaMestra)]; 
-    
-    // 2. Adiciona emojis aleatórios do pool até atingir o número de opções.
-    while (opcoes.length < config.numOpcoes) {
-        const emojiAleatorio = config.emojies[Math.floor(Math.random() * config.emojies.length)];
-        if (!opcoes.includes(emojiAleatorio)) {
-            opcoes.push(emojiAleatorio);
+        // ** NOVO: Função de Reset Exposta ao index.html **
+        function resetarSequenciaVisual() {
+            inicializarVariaveis();
         }
-    }
-    
-    // Embaralha as opções para que a ordem não seja óbvia
-    opcoes.sort(() => Math.random() - 0.5);
 
-    // Cria os botões na tela
-    opcoes.forEach(emoji => {
-        const button = document.createElement('button');
-        button.className = 'btn-emoji-opcao';
-        button.innerText = emoji;
-        // Adiciona o manipulador de clique global
-        button.onclick = () => verificarCliqueUsuario(emoji); 
-        areaBotoesVisual.appendChild(button);
-    });
-}
+        // ** 1. Funções de Fluxo do Jogo **
 
-/**
- * Trata o caso de acerto completo da sequência.
- */
-function tratarAcertoCompleto() {
-    totalSequenciasCorretas++;
-    acertosNoNivel++;
-    telaJogo.classList.add('bloqueado'); // Bloqueia cliques temporariamente
-    
-    // Chama a função global de feedback
-    if (typeof exibirFeedback === 'function') {
-        exibirFeedback(true, () => {
-            telaJogo.classList.remove('bloqueado');
-            const config = configuracaoNiveis[nivelAtual - 1];
+        // Inicia o Jogo (Chamado por index.html)
+        function iniciarSequenciaVisual() {
+            // Garante que o estado seja limpo se não foi resetado
+            if (startTime === null || totalAcertos + totalErros === 0) {
+                 inicializarVariaveis();
+            }
+            
+            // Adiciona a dificuldade inicial: Nível 1 começa com 3 emojis
+            // O nível visual é o tamanho da sequência
+            while (sequenciaEmojis.length < nivelVisual + 2) { 
+                 const emojiAleatorio = emojisDisponiveis[Math.floor(Math.random() * emojisDisponiveis.length)];
+                 sequenciaEmojis.push(emojiAleatorio);
+            }
+            
+            proximoTurnoVisual();
+        }
+        
+        // Prepara a próxima rodada (não muda o nível, apenas repete a sequência)
+        function proximoTurnoVisual() {
+            sequenciaUsuarioEmojis = [];
+            mostrarSequenciaVisual(proximaFaseBotoes);
+        }
+        
+        // ** 2. Funções de Visualização **
 
-            // Verifica se o jogador avançou de nível
-            if (acertosNoNivel >= config.acertosNecessarios) {
-                if (nivelAtual < configuracaoNiveis.length) {
-                    nivelAtual++;
-                    acertosNoNivel = 0;
-                    console.log(`Nível avançado para ${nivelAtual}`);
-                } else {
-                    // Nível máximo atingido
-                    finalizarJogo('vitoria');
-                    return; 
+        // Mostra a sequência de emojis que o jogador deve memorizar
+        function mostrarSequenciaVisual(callback) {
+            const mostraDiv = document.getElementById('sequenciaVisualMostra');
+            mostraDiv.innerHTML = '';
+            
+            let i = 0;
+            // Configura o tempo de exibição baseado no nível (fica mais rápido)
+            const tempoExibicaoEmoji = Math.max(800 - (nivelVisual * 50), 300); // Mínimo de 300ms
+            
+            const intervalo = setInterval(() => {
+                const emojiSpan = document.createElement('span');
+                emojiSpan.innerText = sequenciaEmojis[i];
+                emojiSpan.className = 'emoji-sequencia';
+                mostraDiv.appendChild(emojiSpan);
+                
+                // Animação de pulso/piscar
+                emojiSpan.classList.add('ativo');
+                setTimeout(() => {
+                    emojiSpan.classList.remove('ativo');
+                    // Remove o emoji após piscar para que a tela fique vazia enquanto o próximo entra
+                    emojiSpan.remove(); 
+                }, tempoExibicaoEmoji - 200);
+
+                i++;
+                if (i >= sequenciaEmojis.length) {
+                    clearInterval(intervalo);
+                    setTimeout(() => {
+                        // Limpa a tela e chama o callback (proximaFaseBotoes)
+                        mostraDiv.innerHTML = 'Repita a Sequência! 👆';
+                        if (callback) callback();
+                    }, 800); // Pequeno delay antes da fase de resposta
+                }
+            }, tempoExibicaoEmoji);
+        }
+        
+        // Fase 3: Cria os botões para o usuário interagir
+        function proximaFaseBotoes() {
+            // 🚨 Ponto de Correção: Esta função é chamada SOMENTE após a apresentação terminar.
+            criarBotoesVisual(); 
+            jogando = true;
+        }
+
+        // Cria os botões de opção embaralhados
+        function criarBotoesVisual() {
+            const botoesDiv = document.getElementById('areaBotoesVisual');
+            botoesDiv.innerHTML = '';
+            
+            // Pega o número de botões: (Tamanho da sequência + 2, máximo de 6)
+            const numBotoes = Math.min(6, sequenciaEmojis.length + 1); 
+            
+            // Pega um conjunto único de emojis que inclui todos na sequência + extras aleatórios
+            let botoesEmojisUnicos = [...new Set(sequenciaEmojis)];
+            
+            // Adiciona emojis aleatórios do pool até atingir o número de botões desejado
+            while (botoesEmojisUnicos.length < numBotoes) {
+                const emojiAleatorio = emojisDisponiveis[Math.floor(Math.random() * emojisDisponiveis.length)];
+                if (!botoesEmojisUnicos.includes(emojiAleatorio)) {
+                    botoesEmojisUnicos.push(emojiAleatorio);
                 }
             }
             
-            // Atualiza o progresso visual
-            if (typeof atualizarProgressoVisual === 'function') {
-                atualizarProgressoVisual(nivelAtual, acertosNoNivel, configuracaoNiveis[nivelAtual - 1].acertosNecessarios);
+            // Embaralha o conjunto final de botões
+            botoesEmojisUnicos.sort(() => Math.random() - 0.5);
+            
+            botoesEmojisUnicos.forEach(emoji => {
+                const btn = document.createElement('button');
+                btn.innerText = emoji;
+                btn.className = 'btn-emoji-opcao';
+                btn.onclick = () => escolherEmojiVisual(emoji, btn);
+                botoesDiv.appendChild(btn);
+            });
+        }
+        
+        // ** 3. Funções de Lógica e Verificação **
+
+        // Chamado quando o jogador clica em um emoji de opção
+        function escolherEmojiVisual(emoji, button) {
+            if (!jogando) return;
+            playClick();
+
+            // Efeito visual ao clicar
+            button.style.transform = 'scale(0.9)';
+            setTimeout(() => {
+                button.style.transform = '';
+            }, 100);
+
+            sequenciaUsuarioEmojis.push(emoji);
+            verificarSequenciaVisual();
+        }
+
+        // Verifica se o último clique do jogador está correto
+        function verificarSequenciaVisual() {
+            const indice = sequenciaUsuarioEmojis.length - 1;
+            const emojiCorreto = sequenciaEmojis[indice];
+            const emojiEscolhido = sequenciaUsuarioEmojis[indice];
+
+            if (emojiEscolhido !== emojiCorreto) {
+                // ERRO
+                totalErros++;
+                jogando = false;
+                
+                // Passa o callback para finalizarJogo() após o feedback de erro
+                // O index.html trata de chamar 'finalizarJogo' após o feedback
+                exibirFeedback(false, () => finalizarJogo('erro'));
+                return;
             }
 
-            // Inicia a próxima sequência (próximo nível ou próxima rodada)
-            iniciarSequenciaVisual();
-        });
-    } else {
-        // Se o feedback não estiver disponível, apenas avança
-        iniciarSequenciaVisual();
-    }
-}
+            if (sequenciaUsuarioEmojis.length === sequenciaEmojis.length) {
+                // ACERTOU A SEQUÊNCIA COMPLETA
+                totalAcertos++;
+                jogando = false;
+                
+                // Logica de avanço de Nível: a cada 3 acertos, aumenta o nível
+                if (totalAcertos % 3 === 0) {
+                     nivelVisual++;
+                     // Aumenta o tamanho da sequência no próximo turno
+                     const emojiAleatorio = emojisDisponiveis[Math.floor(Math.random() * emojisDisponiveis.length)];
+                     sequenciaEmojis.push(emojiAleatorio);
+                }
+                
+                // Atualiza o progresso visual no index.html (Acerto no Nível é totalAcertos % 3)
+                if (typeof atualizarProgressoVisual === 'function') {
+                    atualizarProgressoVisual(nivelVisual, totalAcertos % 3, 3);
+                }
 
-/**
- * Trata o caso de erro na sequência.
- */
-function tratarErroCompleto() {
-    telaJogo.classList.add('bloqueado'); // Bloqueia cliques temporariamente
-    
-    // Chama a função global de feedback
-    if (typeof exibirFeedback === 'function') {
-        exibirFeedback(false, () => {
-            telaJogo.classList.remove('bloqueado');
-            finalizarJogo('erro'); // Encerra o jogo e mostra o resultado
-        });
-    } else {
-        finalizarJogo('erro');
-    }
-}
+                // Passa o callback para iniciar o próximo turno após o feedback de acerto
+                exibirFeedback(true, proximoTurnoVisual);
+            }
+            
+            // Se ainda não terminou a sequência, continua esperando o próximo clique
+        }
+        
+        // ** 4. Função de Resultado Final **
+        
+        // Exibe o resumo na telaResultadoQI (Chamado pelo index.html)
+        function exibirResultado(motivo) {
+            // Garante que o jogo pare
+            jogando = false;
+            
+            // Calcula o tempo total
+            totalTime = Date.now() - startTime;
+            const tempoEmSegundos = (totalTime / 1000).toFixed(2);
+            
+            // Cálculo do QI (Fórmula baseada em acertos e tempo)
+            let qiCalculado = 100;
+            const totalTentativas = totalAcertos + totalErros;
+            
+            if (totalTentativas > 0) {
+                const acertoRatio = totalAcertos / totalTentativas;
+                
+                // Penaliza o tempo: 1 ponto de QI por segundo gasto (limite de 60s)
+                const tempoPenalidade = Math.min(60, tempoEmSegundos);
+                
+                // QI = Base + (Acerto * Bônus) - Penalidade de Tempo
+                qiCalculado = 70 + (acertoRatio * 80) - (tempoPenalidade * 0.5);
+                
+                // Garante que o QI não seja menor que 70 ou maior que 135
+                qiCalculado = Math.round(Math.max(70, Math.min(135, qiCalculado)));
+            }
 
+            // Atualiza os elementos de resumo no index.html
+            document.getElementById('resumoAcertos').innerText = totalAcertos;
+            document.getElementById('resumoTempo').innerText = tempoEmSegundos + 's';
+            document.getElementById('valorQI').innerText = qiCalculado;
 
-/**
- * Exibe a tela de resultado final.
- * @param {string} motivo - Motivo do fim do jogo ('erro', 'vitoria', 'manual').
- */
-function exibirResultado(motivo) {
-    const tempoFinal = Date.now();
-    const tempoTotalSegundos = Math.floor((tempoFinal - tempoInicio) / 1000);
-    const configAtual = configuracaoNiveis[nivelAtual - 1];
-    
-    // Calcula um valor de "QI" simples baseado no desempenho
-    const pontuacaoBase = (totalSequenciasCorretas * 10) + (nivelAtual * 5);
-    const pontuacaoTempo = Math.max(0, 100 - tempoTotalSegundos);
-    let valorQI = pontuacaoBase + pontuacaoTempo;
-    
-    // Ajusta a pontuação final (limite inferior 50, superior 150)
-    valorQI = Math.min(150, Math.max(50, valorQI));
+            // Reinicia o tempo para o próximo jogo, forçando o reset completo na próxima rodada
+            startTime = null; 
 
-    // Atualiza a tela de resumo (assumindo que as funções de navegação estão no index.html)
-    if (typeof alternarTela === 'function') {
-        alternarTela('telaResumo');
-    }
+            // Alterna a tela para o resumo
+            alternarTela('telaResumo');
+        }
+        
+        // ** EXPOSIÇÃO DA FUNÇÃO PARA O INDEX.HTML **
+        // As funções abaixo tornam o JS da Vercel global
+        window.iniciarSequenciaVisual = iniciarSequenciaVisual;
+        window.resetarSequenciaVisual = resetarSequenciaVisual;
+        window.exibirResultado = exibirResultado;
+        
+        // Esta função não é mais necessária, pois a lógica está correta em mostrarSequenciaVisual.
+        // O index.html não deve chamá-la.
+        // window.criarBotoesOpcao = criarBotoesOpcao;
+    `;
 
-    // Atualiza os dados na tela de resumo
-    document.getElementById('resumoAcertos').innerText = totalSequenciasCorretas;
-    document.getElementById('resumoTempo').innerText = `${tempoTotalSegundos}s`;
-    
-    // Define a cor e o texto do valor QI
-    const valorQIElement = document.getElementById('valorQI');
-    valorQIElement.innerText = valorQI;
-    if (valorQI >= 120) {
-        valorQIElement.style.color = '#4CAF50'; // Verde
-        valorQIElement.style.textShadow = '4px 4px 0 #aaf0aa';
-    } else if (valorQI >= 80) {
-        valorQIElement.style.color = '#ffc300'; // Amarelo
-        valorQIElement.style.textShadow = '4px 4px 0 #fff3c6';
-    } else {
-        valorQIElement.style.color = '#f44336'; // Vermelho
-        valorQIElement.style.textShadow = '4px 4px 0 #f0aaaa';
-    }
-
-    // Reseta o estado do jogo após mostrar o resultado
-    resetarSequenciaVisual();
-}
-
-// ----------------------------------------------------
-// EXPOSIÇÃO GLOBAL
-// As funções abaixo precisam ser acessíveis pelo index.html
-window.iniciarSequenciaVisual = iniciarSequenciaVisual;
-window.resetarSequenciaVisual = resetarSequenciaVisual;
-window.exibirResultado = exibirResultado;
-// As funções do index.html (exibirFeedback, atualizarProgressoVisual, finalizarJogo)
-// são consideradas acessíveis pela API.
-// ----------------------------------------------------
+    // 4. Envia o script de volta para o cliente
+    res.end(gameLogicScript);
+};
